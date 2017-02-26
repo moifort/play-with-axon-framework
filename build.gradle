@@ -36,6 +36,7 @@ dependencies {
 	compile("org.jetbrains.kotlin:kotlin-reflect:${kotlinVersion}")
 	compile('org.springframework.boot:spring-boot-starter-web')
 	compile('org.axonframework:axon-spring-boot-starter:3.0.2')
+	runtime('org.springframework.boot:spring-boot-devtools') // Remove it to make it work
 	runtime('com.h2database:h2')
 	testCompile('org.springframework.boot:spring-boot-starter-test')
 }
