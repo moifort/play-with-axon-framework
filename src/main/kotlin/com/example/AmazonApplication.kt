@@ -1,26 +1,33 @@
 package com.example
 
+import net.sf.ehcache.CacheManager
 import org.axonframework.commandhandling.CommandHandler
 import org.axonframework.commandhandling.TargetAggregateIdentifier
 import org.axonframework.commandhandling.gateway.CommandGateway
 import org.axonframework.commandhandling.model.AggregateIdentifier
 import org.axonframework.commandhandling.model.AggregateLifecycle
+import org.axonframework.common.caching.EhCacheAdapter
 import org.axonframework.eventhandling.EventHandler
-import org.axonframework.eventsourcing.EventCountSnapshotTriggerDefinition
+import org.axonframework.eventhandling.saga.EndSaga
+import org.axonframework.eventhandling.saga.SagaEventHandler
+import org.axonframework.eventhandling.saga.StartSaga
+import org.axonframework.eventsourcing.CachingEventSourcingRepository
 import org.axonframework.eventsourcing.EventSourcingHandler
-import org.axonframework.eventsourcing.EventSourcingRepository
-import org.axonframework.eventsourcing.Snapshotter
+import org.axonframework.eventsourcing.GenericAggregateFactory
 import org.axonframework.eventsourcing.eventstore.EventStore
 import org.axonframework.serialization.Revision
 import org.axonframework.spring.eventsourcing.SpringAggregateSnapshotterFactoryBean
 import org.axonframework.spring.stereotype.Aggregate
+import org.axonframework.spring.stereotype.Saga
 import org.h2.server.web.WebServlet
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.SpringApplication
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.web.servlet.ServletRegistrationBean
+import org.springframework.cache.ehcache.EhCacheManagerFactoryBean
 import org.springframework.context.annotation.Bean
 import org.springframework.stereotype.Component
+import java.util.*
 
 
 @SpringBootApplication
@@ -32,22 +39,31 @@ class AmazonApplication {
         return registration
     }
 
-    @Bean("orderRepository")
-    fun orderRepository(eventStore: EventStore, snapshotter: Snapshotter) =
-            EventSourcingRepository(
-                    Order::class.java,
-                    eventStore,
-                    EventCountSnapshotTriggerDefinition(snapshotter, 3))
-
-//    @Bean("orderRepository")
-//    fun orderRepository(eventStore: EventStore) =
-//            CachingEventSourcingRepository(
-//                    GenericAggregateFactory(Order::class.java),
-//                    eventStore,
-//                    EhCacheAdapter(Cache(CacheConfiguration("orderCache", 1000))))
+    @Bean
+    fun ehCacheManagerFactoryBean(): EhCacheManagerFactoryBean {
+        val ehCacheManagerFactoryBean = EhCacheManagerFactoryBean()
+        ehCacheManagerFactoryBean.setShared(true)
+        return ehCacheManagerFactoryBean
+    }
 
     @Bean
     fun snapshotterFactoryBean() = SpringAggregateSnapshotterFactoryBean()
+
+//    @Bean("orderRepository")
+//    fun orderRepository(eventStore: EventStore, snapshotter: Snapshotter) =
+//            EventSourcingRepository(
+//                    Order::class.java,
+//                    eventStore,
+//                    EventCountSnapshotTriggerDefinition(snapshotter, 3))
+
+//    @Bean("orderRepository")
+//    fun orderRepository(eventStore: EventStore, cacheManager: CacheManager) =
+//            CachingEventSourcingRepository(
+//                    GenericAggregateFactory(Order::class.java),
+//                    eventStore,
+
+
+//                    EhCacheAdapter(cacheManager.getCache("testCache")))
 }
 
 fun main(args: Array<String>) {
@@ -67,14 +83,6 @@ class Simulator(val commandGateway: CommandGateway) : CommandLineRunner {
         commandGateway.send<String>(UpdateOrder("1234"))
         println("-----> Cancel Order")
         commandGateway.send<String>(CancelOrder("1234"))
-//        println("-----> Update Order")
-//        commandGateway.send<String>(UpdateOrder("1234"))
-//        println("-----> Cancel Order")
-//        commandGateway.send<String>(CancelOrder("1234"))
-//        println("-----> Update Order")
-//        commandGateway.send<String>(UpdateOrder("1234"))
-//        println("-----> Cancel Order")
-//        commandGateway.send<String>(CancelOrder("1234"))
     }
 }
 
@@ -212,36 +220,36 @@ class Payment {
 }
 
 
-//@Saga
-//class OrderManagment {
-//    lateinit var orderId: String
-//    lateinit var shipmentId: String
-//    lateinit var paymentId: String
-//
-//    @StartSaga
-//    @SagaEventHandler(associationProperty = "orderId")
-//    fun handle(event: OrderCreated, commandGateway: CommandGateway) {
-//        this.orderId = event.orderId
-//        this.shipmentId = UUID.randomUUID().toString()
-//        this.paymentId = UUID.randomUUID().toString()
-//        commandGateway.send<String>(CreateShipment(this.shipmentId, this.orderId))
-//        commandGateway.send<String>(CreatePayment(this.paymentId, this.orderId))
-//    }
-//
-//    @EndSaga
-//    @SagaEventHandler(associationProperty = "orderId")
-//    fun handle(event: OrderCanceled, commandGateway: CommandGateway) {
-//        commandGateway.send<String>(CancelShipment(this.shipmentId))
-//        commandGateway.send<String>(CancelPayment(this.paymentId))
-//    }
-//}
+@Saga
+class OrderManagment {
+    lateinit var orderId: String
+    lateinit var shipmentId: String
+    lateinit var paymentId: String
+
+    @StartSaga
+    @SagaEventHandler(associationProperty = "orderId")
+    fun handle(event: OrderCreated, commandGateway: CommandGateway) {
+        this.orderId = event.orderId
+        this.shipmentId = UUID.randomUUID().toString()
+        this.paymentId = UUID.randomUUID().toString()
+        commandGateway.send<String>(CreateShipment(this.shipmentId, this.orderId))
+        commandGateway.send<String>(CreatePayment(this.paymentId, this.orderId))
+    }
+
+    @EndSaga
+    @SagaEventHandler(associationProperty = "orderId")
+    fun handle(event: OrderCanceled, commandGateway: CommandGateway) {
+        commandGateway.send<String>(CancelShipment(this.shipmentId))
+        commandGateway.send<String>(CancelPayment(this.paymentId))
+    }
+}
 
 @Component
 class EventLogger {
 
     @EventHandler
     fun on(event: Any) {
-        //println("Event $event")
+        println("Event $event")
     }
 }
 
