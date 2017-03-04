@@ -1,21 +1,19 @@
 package com.example
 
-import net.sf.ehcache.CacheManager
 import org.axonframework.commandhandling.CommandHandler
 import org.axonframework.commandhandling.TargetAggregateIdentifier
 import org.axonframework.commandhandling.gateway.CommandGateway
 import org.axonframework.commandhandling.model.AggregateIdentifier
 import org.axonframework.commandhandling.model.AggregateLifecycle
-import org.axonframework.common.caching.EhCacheAdapter
 import org.axonframework.eventhandling.EventHandler
 import org.axonframework.eventhandling.saga.EndSaga
 import org.axonframework.eventhandling.saga.SagaEventHandler
 import org.axonframework.eventhandling.saga.StartSaga
-import org.axonframework.eventsourcing.CachingEventSourcingRepository
 import org.axonframework.eventsourcing.EventSourcingHandler
-import org.axonframework.eventsourcing.GenericAggregateFactory
-import org.axonframework.eventsourcing.eventstore.EventStore
 import org.axonframework.serialization.Revision
+import org.axonframework.serialization.SimpleSerializedType
+import org.axonframework.serialization.upcasting.event.IntermediateEventRepresentation
+import org.axonframework.serialization.upcasting.event.SingleEventUpcaster
 import org.axonframework.spring.eventsourcing.SpringAggregateSnapshotterFactoryBean
 import org.axonframework.spring.stereotype.Aggregate
 import org.axonframework.spring.stereotype.Saga
@@ -61,9 +59,19 @@ class AmazonApplication {
 //            CachingEventSourcingRepository(
 //                    GenericAggregateFactory(Order::class.java),
 //                    eventStore,
-
-
 //                    EhCacheAdapter(cacheManager.getCache("testCache")))
+
+//    @Bean
+//    open fun eventStorageEngine(serializer: Serializer,
+//                                dataSource: DataSource,
+//                                upcaster: OderCancelToStoppedEventUpcaster,
+//                                entityManagerProvider: EntityManagerProvider,
+//                                transactionManager: TransactionManager) = JpaEventStorageEngine(
+//            serializer,
+//            EventUpcaster { upcaster.upcast(it) },
+//            dataSource,
+//            entityManagerProvider,
+//            transactionManager)
 }
 
 fun main(args: Array<String>) {
@@ -97,6 +105,27 @@ data class OrderUpdated(val orderId: String)
 data class CancelOrder(@TargetAggregateIdentifier val orderId: String)
 @Revision("1.0.0")
 data class OrderCanceled(val orderId: String)
+
+@Revision("1.0.0")
+data class OrderStopped(val orderId: String, val action: String)
+
+class OderCancelToStoppedEventUpcaster : SingleEventUpcaster() {
+    val fromType = SimpleSerializedType(OrderCanceled::class.java.name, "1.0.0")
+    val toType = SimpleSerializedType(OrderStopped::class.java.name, "1.0.0")
+
+    override fun canUpcast(intermediateRepresentation: IntermediateEventRepresentation) = intermediateRepresentation.type == fromType
+
+    override fun doUpcast(intermediateRepresentation: IntermediateEventRepresentation) = intermediateRepresentation.upcastPayload(
+            SimpleSerializedType(toType.name, toType.revision),
+            org.dom4j.Document::class.java,
+            {
+                it.rootElement.name = "OrderStopped"
+                it.rootElement.addElement("complain")
+                it.rootElement.element("complain").setText("No complaint")
+                it
+            }
+    )
+}
 
 @Aggregate
 class Order {
